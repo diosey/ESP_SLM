@@ -6,7 +6,113 @@
 **Tiempo total estimado**: 4-6 horas  
 **Requisito previo**: si ya tienes `checkpoints/ep20_val1.537.pt` y
 `artifacts/bitnet_weights.bin`, puedes saltar directamente a la
+[Guía rápida con Eclipse IDE](#guía-rápida-con-eclipse-ide) o a la
 [Fase 7](#7-compilación-del-firmware).
+
+---
+
+## ⚡ Guía rápida con Eclipse IDE
+
+> Para usuarios que ya tienen `esp32-bitnet-firmware.rar` y
+> `bitnet_weights.bin` (2,823,760 bytes), y quieren compilar y flashear
+> sin pasar por la línea de comandos.
+
+**Requisitos**:
+- Eclipse IDE con el plugin **ESP-IDF** de Espressif instalado.
+- ESP32 conectado por USB.
+- El archivo `bitnet_weights.bin` (2,823,760 bytes) disponible.
+
+### Paso 1: Extraer el firmware
+
+Extrae `esp32-bitnet-firmware.rar` a una carpeta local. El resultado es
+un proyecto ESP-IDF completo, listo para importar. Estructura:
+
+```
+ESP32_SML/
+├── CMakeLists.txt
+├── partitions.csv
+├── sdkconfig.defaults
+└── main/
+    ├── CMakeLists.txt
+    ├── main.c
+    ├── bitnet_inference.c / .h
+    ├── tokenizer.c / .h
+    ├── bitnet_weights.h
+    ├── vocab_data.h
+    ├── data/
+    │   └── index.html
+    └── weights/
+        └── bitnet_weights.bin    ← 2,823,760 bytes
+```
+
+### Paso 2: Importar el proyecto en Eclipse
+
+1. Abre Eclipse con el plugin ESP-IDF.
+2. Ve a `File → Import → ESP-IDF → Existing IDF Project`.
+3. Selecciona la carpeta extraída (`ESP32_SML/`).
+4. Finaliza la importación.
+
+### Paso 3: Flashear el binario de pesos (ANTES de compilar)
+
+El binario de pesos va a la partición `weights` en el offset
+`0x120000`. Es una partición **independiente** del firmware, por lo que
+se puede (y se debe) flashear antes de compilar.
+
+1. Clic derecho sobre el proyecto en el explorador.
+2. Menú **ESP-IDF** → **Write Binary Data to Flash**.
+3. En el diálogo:
+   - **Binary file**: `main/weights/bitnet_weights.bin`
+   - **Offset**: `0x120000`
+   - **COM port**: el del ESP32
+4. Clic en **Flash**.
+
+### Paso 4: Compilar el firmware
+
+1. Clic en el icono del **martillo** (🔨) en la barra superior.
+2. Espera a que termine la compilación.
+
+**Salida esperada**:
+
+```
+Project build complete.
+Binary size: 887,520 bytes (15% free in factory partition)
+```
+
+### Paso 5: Flashear y ejecutar
+
+1. Clic en el icono **verde** (▶️ Run) en la barra superior.
+2. El IDE flashea:
+   - Bootloader (`0x1000`)
+   - Partition table (`0x8000`)
+   - Firmware (`0x20000`)
+   - **SPIFFS** (`index.html`) — solo si `FLASH_IN_PROJECT` está
+     configurado en `main/CMakeLists.txt` (lo está por defecto).
+3. Abre el **monitor serie** (`ESP-IDF → Monitor`).
+4. Deberías ver:
+
+```
+I (xxx) BITNET: === BitNet ESP32 (chat web) ===
+I (xxx) BITNET: SPIFFS: 2 KB / 110 KB
+I (xxx) BITNET: weights: 2883584 bytes @ 0x120000
+I (xxx) BITNET: WiFi AP OK: SSID=BitNet-ESP32, pass=bitnet1234
+I (xxx) BITNET: Listo. Conectate a BitNet-ESP32 y abre http://192.168.4.1
+```
+
+### ⚠️ Notas importantes
+
+- **Orden de flasheo**: el binario de pesos se flashea **antes** que el
+  firmware. Ambos van a offsets distintos (`0x120000` vs `0x20000`), así
+  que no se sobrescriben.
+- **Erase-flash borra el bin**: si ejecutas
+  `Espressif → Erase Flash`, el binario de pesos **se elimina**. Deberás
+  flashearlo de nuevo (Paso 3).
+- **SPIFFS vacío**: si el monitor muestra `SPIFFS: 0 KB / 110 KB`, el
+  `index.html` no se flasheó. Prueba
+  `ESP-IDF → Flash SPIFFS Image` manualmente. Verifica también que
+  `main/CMakeLists.txt` tenga:
+  ```cmake
+  spiffs_create_partition_image(spiffs data FLASH_IN_PROJECT)
+  ```
 
 ---
 
@@ -43,6 +149,7 @@
 | Python        | 3.10+   | PC local                      |
 | PyTorch       | 2.0+    | PC local y Colab              |
 | ESP-IDF       | v5.3.1  | PC local                      |
+| Eclipse IDE   | —       | PC local (opcional)           |
 | Cuenta Google | —       | Para Colab y Drive            |
 
 ### 1.3. Instalación de ESP-IDF
@@ -110,7 +217,7 @@ dir artifacts
 
 | Situación                                     | Acción                       |
 |-----------------------------------------------|------------------------------|
-| Ambos archivos existen                        | Saltar a la **Fase 7**       |
+| Ambos archivos existen                        | Saltar a la **Guía rápida** o a la **Fase 7** |
 | Falta el checkpoint pero existe el binario    | Reentrenar (Fases 3-6)       |
 | Falta el binario pero existe el checkpoint    | Re-exportar (Fase 6)         |
 | Faltan ambos                                  | Seguir todas las fases       |
@@ -423,18 +530,26 @@ C:\ESP32_work\ESP32_SML\
     ├── vocab_data.h
     ├── data/
     │   └── index.html
-    └── weights/              ← crear si no existe
+    └── weights/
+        └── bitnet_weights.bin
 ```
 
-### 7.2. Copiar los artefactos generados
+### 7.2. Verificar el binario de pesos
+
+El binario `main/weights/bitnet_weights.bin` ya viene incluido en el
+`.rar` del firmware. Comprueba que su tamaño sea **2,823,760 bytes**:
+
+```cmd
+dir C:\ESP32_work\ESP32_SML\main\weights\bitnet_weights.bin
+```
+
+Si el tamaño es correcto, no hay que hacer nada más. Si por alguna
+razón falta o está corrupto, cópialo desde
+`ESP_SLM/artifacts/bitnet_weights.bin`:
 
 ```cmd
 copy ESP_SLM\artifacts\bitnet_weights.bin C:\ESP32_work\ESP32_SML\main\weights\
 ```
-
-Verifica que `bitnet_weights.h` y `vocab_data.h` estén en
-`C:\ESP32_work\ESP32_SML\main\`. Si no, cópialos desde
-`ESP_SLM\bitnet-to-c\`.
 
 ### 7.3. Compilar
 
