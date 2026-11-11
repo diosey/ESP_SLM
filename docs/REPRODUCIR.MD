@@ -23,7 +23,7 @@
 
 ### Paso 1: Extraer el firmware
 
-Extrae `esp32-bitnet-firmware.rar` a una carpeta local. El resultado es
+Extrae `ESP32_SLM_192.rar` a una carpeta local. El resultado es
 un proyecto ESP-IDF completo, listo para importar. Estructura:
 
 ```
