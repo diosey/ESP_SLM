@@ -1,0 +1,56 @@
+BitNet C - diagnostico 192 tokens
+V=2000 E=192 L=6 H=4 F=384 S=192 PLE=320
+
+=== pos_embed (FP16 -> FP32), dims 0..3 ===
+pos   0: bin = [-0.10394 -0.00035 -0.12793 -0.08313]
+pos   1: bin = [+0.03143 -0.00040 -0.06235 -0.04898]
+pos  50: bin = [-0.04626 +0.00312 -0.00203 -0.04239]
+pos 100: bin = [+0.00151 -0.02974 -0.07953 -0.00743]
+pos 191: bin = [+0.04434 +0.05258 +0.04395 +0.03497]
+
+=== Logits (top-5) con TOKENS = {4, 10, 20, 30, 40} ===
+pos 0: #1=2(+10.8506) #2=7(+9.5585) #3=5(+8.8438) #4=39(+8.0353) #5=1956(+7.8151)
+pos 1: #1=1743(+4.9671) #2=614(+4.5255) #3=503(+4.2947) #4=220(+4.2667) #5=314(+4.1808)
+pos 2: #1=1743(+6.0792) #2=614(+4.9845) #3=235(+4.8608) #4=634(+4.6149) #5=1997(+4.5491)
+pos 3: #1=175(+16.1757) #2=235(+12.9430) #3=1980(+10.9187) #4=1084(+10.4732) #5=732(+10.0396)
+pos 4: #1=873(+9.7792) #2=287(+9.7217) #3=135(+9.7109) #4=598(+9.3238) #5=457(+8.9739)
+
+=== Generacion ===
+
+----------------------------------------
+Prompt: "Habia una vez" (6 tokens)
+Salida: Habia una vez! ¡Una vez, un niño va a casa! Él ve un perro. ¡Es grande! Ana dice: "¡Hola, perro!"
+
+El perro ladra. ¡Quiere jugar! ¡Pero el perro no se puede jugar! ¡No podemos jugar! Pero el perro era rápido. Él estaba asustado.
+
+Ana está oscuro también. No pone sus patas en una casa. Su papá está triste. 
+
+Ana tiene miedo. ¡Ella no quiere jugar! ¡Perdí mis patas en el perro!
+
+El perro no puede hablar. El perro se va. Ana se siente sola. ¡Ella sabe que puede jugar con sus patas otra ve
+
+----------------------------------------
+Prompt: "El nino" (3 tokens)
+Salida: El nino. 
+
+El nino podía ver a su mamá. Mamá estaba contenta. El nino necesitaba desayunas. ¡Pero luego, el nino quería! El nino podía verlo. ¡El nino podía jugar!
+
+El nino vio al nino peleando. ¡Era un lindo gatito! El nino quería jugar con el gatito. ¡El nino sabía que el gatito necesitaba escuchar otros gatitos! El nino estaba solo. ¡Estaba feliz!
+
+El nino jugó en la arena. ¡El gatito estaba feliz! El nino jugó con el gatito todos los días. ¡Le gustaba jugar con el gatito!
+
+
+----------------------------------------
+Prompt: "Un dia" (3 tokens)
+Salida: Un dia: "¡Gracias!", dijo el niño. "Este historio divertido". 
+
+Un niño pequeño estaba jugando con un camión rojo. El niño pequeño dijo: "¡Adivina!" El camión rojo dijo: "¡Tengo un helado!" El niño pequeño corrió. El niño pequeño se puso triste.
+
+La mamá dijo: "¡No te preocupes, cariño! Yo sé que tengo un helado!" El niño pequeño dijo: "¡Sí!" La mamá dijo: "¡Juguemos!" Los dos niños se quedaron tristes especiales.
+
+Entonces, el niño pequeño vio un payaso. El
+
+----------------------------------------
+Prompt: "La nina estaba" (5 tokens)
+Salida: La nina estaba. ¡El gato era muy feliz!
+

@@ -36,10 +36,10 @@
 - **Cuantización**: núcleo BitNet a 2 bits empaquetados, tabla PLE a
   INT4, embeddings a INT4, biases y normalizaciones a FP16, KV Cache a
   INT8.
-- **Sin asignación dinámica de pesos**: los 2.69 MB del modelo viven en
+- **Sin asignación dinámica de pesos**: los 2.74 MB del modelo viven en
   Flash y se mapean con `esp_partition_mmap` (cero copia a SRAM).
 - **Aislamiento del firmware**: el binario de pesos va en una partición
-  independiente; el firmware (867 KB) y la web (SPIFFS, 2.2 KB) van en
+  independiente; el firmware (~867 KB) y la web (SPIFFS, ~2.2 KB) van en
   sus propias particiones.
 
 ---
@@ -49,7 +49,7 @@
 | Componente             | Valor                                |
 |------------------------|--------------------------------------|
 | Arquitectura           | Transformer decoder-only, Pre-Norm   |
-| Parámetros totales     | **6,810,896**                        |
+| Parámetros totales     | **6,835,472**                        |
 | `vocab_size`           | 2000                                 |
 | `embed_dim`            | 192                                  |
 | `num_heads` (Q)        | 4                                    |
@@ -57,7 +57,8 @@
 | `head_dim`             | 48                                   |
 | `num_layers`           | 6                                    |
 | `ff_dim`               | 384                                  |
-| `max_seq_len`          | 64                                   |
+| `max_seq_len` (entrenado) | 192                               |
+| `max_seq_len` (ESP32)  | 160 (limitado por DRAM)              |
 | `ple_hidden_dim`       | 320                                  |
 | Parámetros en PLE      | 3,840,000                            |
 | Parámetros ternarios   | 2,558,976                            |
@@ -69,10 +70,10 @@
 | Métrica                      | Valor                                            |
 |------------------------------|--------------------------------------------------|
 | Dataset                      | TinyStories español (`robrenaud/multilingual_tinystories`) |
-| Historias usadas             | 300,000 (~19.5M tokens)                          |
+| Historias usadas             | 300,000 (~80.9M tokens tokenizados)              |
 | Épocas                       | 20                                               |
-| Loss de validación final     | **1.537**                                        |
-| Perplejidad (PPL)            | **4.65**                                         |
+| Loss de validación final     | **1.3817**                                       |
+| Perplejidad (PPL)            | **3.98**                                         |
 | Tiempo total de entrenamiento| ~110 minutos en T4 (Colab)                       |
 | Velocidad                    | ~5.5 min/época                                   |
 
@@ -82,12 +83,12 @@
 
 | Métrica                          | Valor                                          |
 |----------------------------------|------------------------------------------------|
-| Velocidad de generación          | **~3.2 tokens/s** (50 tokens en ~16 s)         |
-| Heap libre en operación          | 143 KB                                         |
-| Consumo de Flash del modelo      | 2.69 MB de los 4 MB totales                    |
-| Firmware compilado               | 867 KB (15% libre en la partición de 1 MB)     |
-| KV Cache en SRAM                 | 36 KB (INT8, 64 tokens)                        |
-| Tiempo de inferencia de un prompt| ~8-17 segundos según longitud                  |
+| Velocidad de generación          | **~2–2.5 tokens/s**                            |
+| Heap libre en operación          | **~88 KB**                                     |
+| Consumo de Flash del modelo      | 2.74 MB de los 4 MB totales                    |
+| Firmware compilado               | ~867 KB (15% libre en la partición de 1 MB)    |
+| KV Cache en SRAM                 | ~97.5 KB (INT8, 160 tokens)                    |
+| Tiempo de inferencia de un prompt| ~60–75 segundos para ~150 tokens               |
 
 ---
 
@@ -99,7 +100,7 @@
 | `otadata`   | `0xe000`   | 8 KB     | Metadata de OTA                  |
 | `phy_init`  | `0x10000`  | 4 KB     | Calibración de RF                |
 | `factory`   | `0x20000`  | 1 MB     | Firmware                         |
-| `weights`   | `0x120000` | 2.75 MB  | Binario de pesos (mmap)          |
+| `weights`   | `0x120000` | 2.75 MB  | Binario de pesos (mmap, 2,872,912 B) |
 | `spiffs`    | `0x3E0000` | 128 KB   | `index.html`                     |
 
 ---
@@ -123,15 +124,18 @@
 
 | Problema                                        | Causa                                                              | Solución                                                       |
 |-------------------------------------------------|--------------------------------------------------------------------|----------------------------------------------------------------|
-| Dataset inicial insuficiente                    | El corpus llanero original (6.68 MB) hacía inviable la tabla PLE (PPL 52.82) | Migración a TinyStories en español (80M tokens disponibles, 19.5M usados) |
+| Dataset inicial insuficiente                    | El corpus llanero original (6.68 MB) hacía inviable la tabla PLE (PPL 52.82) | Migración a TinyStories en español (80M tokens disponibles, 80.9M tokenizados) |
 | Ruido académico en el corpus                    | Referencias bibliográficas y URLs contaminaban el texto            | Eliminación de entradas no narrativas                          |
-| Tabla PLE no aprendía con pocos datos           | Requería al menos 10 tokens por parámetro; con 6.68 MB no se alcanzaba | Aumento del corpus a ~19.5M tokens                             |
+| Tabla PLE no aprendía con pocos datos           | Requería al menos 10 tokens por parámetro; con 6.68 MB no se alcanzaba | Aumento del corpus a ~80.9M tokens                         |
 | Cuantización de la tabla PLE                    | Pasó de FP16 (1.57 MB) a INT4 (1.83 MB empaquetada)                | Necesario para permitir el vocabulario real                    |
-| Velocidad baja del firmware (`-Os`)             | `ternary_matmul` a 1.85 tok/s con *branches*                       | Cambio a `-O2` + eliminación de *branches* del bucle interno → 3.2 tok/s |
+| Velocidad baja del firmware (`-Os`)             | `ternary_matmul` a 1.85 tok/s con *branches*                       | Cambio a `-O2` + eliminación de *branches* del bucle interno   |
 | Timeout del Task Watchdog                       | La calibración RF y el matmul excedían los 5 s por defecto         | Subida del timeout a 30 s                                      |
 | Calibración RF fallida (`0x1102`)               | Sin datos de calibración en NVS, se intentaba calibración completa y el sistema reiniciaba | Forzar calibración parcial + borrar flash antes del primer boot |
 | Encoding del monitor serie                      | Los caracteres UTF-8 (ñ, á) se mostraban como `ï¿½`                 | El modelo genera UTF-8 correcto; el problema es del terminal, no del firmware |
 | `hex escape sequence out of range` en `vocab_data.h` | Literales C con `\xc3\xb1` seguidos de caracteres hexadecimales ambiguos | Añadir separadores `""` entre secuencias de escape              |
+| Bug MQA en `attention()`                        | K/V se indexaban con `off + d` (offset de cabeza Q), pero `NUM_KV_HEADS=1` → lectura fuera de fila para `h ≥ 1`, contaminando pos>0 | Cambiar `krow[off + d]` → `krow[d]` y `V_cache[l][j][off + d]` → `V_cache[l][j][d]` |
+| Overflow de DRAM con `MAX_SEQ_LEN=192`          | `dram0_0_seg overflowed by 5176 bytes`; el KV Cache INT8 a 192 tokens + buffers no caben en la DRAM del ESP32 original | Bajar `MAX_SEQ_LEN` a 160 en `bitnet_weights.h` (ahorro de ~19.5 KB); el modelo se entrena a 192 pero se ejecuta a 160 |
+| Fine-tuning fallido                             | Intentos de especializar en poesía con BitLoRA (val_loss 7.5, azar) y LoRA estándar (val_loss 3.75, peor que base) | El modelo base es demasiado pequeño para absorber un dominio nuevo sin destruir la coherencia. Se usa el checkpoint base sin fine-tuning |
 
 ---
 
@@ -139,8 +143,8 @@
 
 | Componente         | Requisito                                                       |
 |--------------------|-----------------------------------------------------------------|
-| Entrenamiento      | Cuenta de Google Colab (GPU T4), Python 3.10+, PyTorch           |
-| Exportación        | Python 3.10+ con PyTorch y NumPy                                |
+| Entrenamiento      | Cuenta de Google Colab (GPU T4), Python 3.11+, PyTorch           |
+| Exportación        | Python 3.11+ con PyTorch y NumPy                                |
 | Firmware           | ESP-IDF v5.3.1, ESP32 original (sin PSRAM, 4 MB Flash)          |
 | Hardware           | Cable USB de datos, fuente que entregue ≥500 mA durante la calibración RF |
 
@@ -150,7 +154,8 @@
 
 | Limitación                                                | Detalle                                                              |
 |-----------------------------------------------------------|----------------------------------------------------------------------|
-| Longitud máxima de contexto                               | 64 tokens (prompt + generación)                                      |
+| Longitud máxima de contexto                               | 160 tokens (prompt + generación) en el ESP32; el modelo base se entrena a 192 |
 | Coherencia en posiciones avanzadas                        | Se degrada en las últimas posiciones (limitación intrínseca de ~7M params) |
 | Dominio del modelo                                        | Español genérico; no está especializado en ningún dominio particular |
 | Determinismo                                              | Las respuestas son deterministas para la misma semilla; se re-siembra `srand` en cada petición |
+| Sin fine-tuning                                           | Los intentos de especialización (poesía) fallaron; se conserva el modelo base |

@@ -3,8 +3,7 @@
 > Cómo reproducir el proyecto completo desde cero: desde el dataset
 > original hasta un ESP32 generando texto de forma local.
 
-**Tiempo total estimado**: 4-6 horas  
-**Requisito previo**: si ya tienes `checkpoints/ep20_val1.537.pt` y
+**Requisito previo**: si ya tienes `checkpoints/ep20_val1.382.pt` y
 `artifacts/bitnet_weights.bin`, puedes saltar directamente a la
 [Guía rápida con Eclipse IDE](#guía-rápida-con-eclipse-ide) o a la
 [Fase 7](#7-compilación-del-firmware).
@@ -14,13 +13,13 @@
 ## ⚡ Guía rápida con Eclipse IDE
 
 > Para usuarios que ya tienen `esp32-bitnet-firmware.rar` y
-> `bitnet_weights.bin` (2,823,760 bytes), y quieren compilar y flashear
+> `bitnet_weights.bin` (2,872,912 bytes), y quieren compilar y flashear
 > sin pasar por la línea de comandos.
 
 **Requisitos**:
 - Eclipse IDE con el plugin **ESP-IDF** de Espressif instalado.
 - ESP32 conectado por USB.
-- El archivo `bitnet_weights.bin` (2,823,760 bytes) disponible.
+- El archivo `bitnet_weights.bin` (2,872,912 bytes) disponible.
 
 ### Paso 1: Extraer el firmware
 
@@ -42,7 +41,7 @@ ESP32_SML/
     ├── data/
     │   └── index.html
     └── weights/
-        └── bitnet_weights.bin    ← 2,823,760 bytes
+        └── bitnet_weights.bin    ← 2,872,912 bytes
 ```
 
 ### Paso 2: Importar el proyecto en Eclipse
@@ -52,11 +51,12 @@ ESP32_SML/
 3. Selecciona la carpeta extraída (`ESP32_SML/`).
 4. Finaliza la importación.
 
-### Paso 3: Flashear el binario de pesos (ANTES de compilar)
+### Paso 3: Flashear el binario de pesos
 
 El binario de pesos va a la partición `weights` en el offset
-`0x120000`. Es una partición **independiente** del firmware, por lo que
-se puede (y se debe) flashear antes de compilar.
+`0x120000`. Es una partición **independiente** del firmware. El orden
+respecto al firmware es indiferente: ambas escriben regiones distintas
+de la flash.
 
 1. Clic derecho sobre el proyecto en el explorador.
 2. Menú **ESP-IDF** → **Write Binary Data to Flash**.
@@ -75,8 +75,11 @@ se puede (y se debe) flashear antes de compilar.
 
 ```
 Project build complete.
-Binary size: 887,520 bytes (15% free in factory partition)
+Binary size: <tamaño> bytes (<%> free in factory partition)
 ```
+
+El tamaño exacto varía con la versión del compilador; verifica que no
+aparezca `region overflowed` ni `section overflowed`.
 
 ### Paso 5: Flashear y ejecutar
 
@@ -93,16 +96,15 @@ Binary size: 887,520 bytes (15% free in factory partition)
 ```
 I (xxx) BITNET: === BitNet ESP32 (chat web) ===
 I (xxx) BITNET: SPIFFS: 2 KB / 110 KB
-I (xxx) BITNET: weights: 2883584 bytes @ 0x120000
+I (xxx) BITNET: weights: 2883584 bytes @ 0x120000 (bin: 2872912 bytes)
 I (xxx) BITNET: WiFi AP OK: SSID=BitNet-ESP32, pass=bitnet1234
 I (xxx) BITNET: Listo. Conectate a BitNet-ESP32 y abre http://192.168.4.1
 ```
 
 ### ⚠️ Notas importantes
 
-- **Orden de flasheo**: el binario de pesos se flashea **antes** que el
-  firmware. Ambos van a offsets distintos (`0x120000` vs `0x20000`), así
-  que no se sobrescriben.
+- **Orden de flasheo**: pesos y firmware van a offsets distintos
+  (`0x120000` vs `0x20000`), así que cualquier orden es válido.
 - **Erase-flash borra el bin**: si ejecutas
   `Espressif → Erase Flash`, el binario de pesos **se elimina**. Deberás
   flashearlo de nuevo (Paso 3).
@@ -113,6 +115,10 @@ I (xxx) BITNET: Listo. Conectate a BitNet-ESP32 y abre http://192.168.4.1
   ```cmake
   spiffs_create_partition_image(spiffs data FLASH_IN_PROJECT)
   ```
+- **`MAX_SEQ_LEN = 160`**: el firmware compila con `MAX_SEQ_LEN = 160`
+  por límite de DRAM, aunque el `.bin` de pesos se exportó a 192. No
+  hay que re-exportar: el binario de 2,872,912 bytes sigue siendo
+  válido y solo se usan las primeras 160 filas de `pos_embed`.
 
 ---
 
@@ -146,7 +152,7 @@ I (xxx) BITNET: Listo. Conectate a BitNet-ESP32 y abre http://192.168.4.1
 
 | Herramienta   | Versión | Dónde se instala              |
 |---------------|---------|-------------------------------|
-| Python        | 3.10+   | PC local                      |
+| Python        | 3.11+   | PC local                      |
 | PyTorch       | 2.0+    | PC local y Colab              |
 | ESP-IDF       | v5.3.1  | PC local                      |
 | Eclipse IDE   | —       | PC local (opcional)           |
@@ -188,22 +194,19 @@ ESP_SLM/
 ├── docs/
 │   └── ARQUITECTURA.MD
 ├── training/
-│   ├── model.py
+│   ├── model_192.py
 │   ├── tokenizer.py
-│   ├── train.py
-│   ├── export_weights.py
+│   ├── train_192.py
+│   ├── export_weights_192.py
 │   ├── export_vocab.py
-│   ├── export_reference.py
 │   ├── build_vocab_bigram.py
-│   ├── build_vocab.py
-│   ├── clean_corpus.py
 │   ├── vocab_bigram.json
-│   └── vocab.json
+│   └── ...
 ├── tools/
 │   ├── check_header.py
 │   └── inspec_header.py
 ├── bitnet-to-c/                     (motor C de referencia)
-├── checkpoints/                     (ep20_val1.537.pt si lo tienes)
+├── checkpoints/                     (ep20_val1.382.pt si lo tienes)
 └── artifacts/                       (bitnet_weights.bin si lo tienes)
 ```
 
@@ -267,10 +270,9 @@ print(f"\nTotal descargado: {total_size / (1024**3):.2f} GB")
 **Verificación**: deben aparecer 3 archivos `stories_00.json`,
 `stories_01.json`, `stories_02.json` (~470 MB cada uno).
 
-> **Nota**: con 1 solo archivo (~100K historias, ~19.5M tokens) es
-> suficiente para entrenar el modelo actual. Con 3 archivos se llega
-> a ~80M tokens disponibles, aunque `MAX_SEQUENCES` limitará el
-> número real usado en el entrenamiento.
+> **Nota**: con 1 solo archivo (~100K historias) es suficiente para
+> empezar. Con 3 archivos se llega a ~80M tokens disponibles, aunque
+> `MAX_SEQUENCES` limitará el número real usado en el entrenamiento.
 
 ---
 
@@ -362,16 +364,17 @@ with open("/content/corpus_tinystories_tokenized.pkl", "wb") as f:
 print(f"✅ {len(all_ids):,} tokens → corpus_tinystories_tokenized.pkl")
 ```
 
-**Tiempo**: ~2 minutos. Resultado: ~80M tokens en un `.pkl` de ~280 MB.
+Resultado: ~80M tokens en un `.pkl` de ~280 MB.
 
-### 5.2. Configurar rutas en `train.py`
+### 5.2. Configurar rutas en `train_192.py`
 
-Edita `train.py` y ajusta las rutas:
+Edita `train_192.py` y ajusta las rutas:
 
 ```python
 TOKENIZED_CORPUS = "/content/corpus_tinystories_tokenized.pkl"
-OUTPUT_DIR = "/content/drive/MyDrive/checkpoints_PLE_TinyStories"
-MAX_SEQUENCES = 300_000     # o 600_000 para entrenar con más datos
+OUTPUT_DIR = "/content/drive/MyDrive/checkpoints_PLE_192"
+MAX_SEQUENCES = 300_000     # 300K secuencias × 192 tokens ≈ 57.6M tokens
+MAX_SEQ_LEN = 192
 ```
 
 > **Recomendación**: monta tu Drive primero con
@@ -392,10 +395,10 @@ Debe mostrar `True` y `Tesla T4`. Si muestra `False`, ve a
 ### 5.4. Lanzar el entrenamiento
 
 ```python
-!cd /content && python train.py
+!cd /content && python train_192.py
 ```
 
-**Hiperparámetros** (por defecto en `train.py`):
+**Hiperparámetros** (por defecto en `train_192.py`):
 
 | Parámetro        | Valor                       |
 |------------------|-----------------------------|
@@ -405,19 +408,18 @@ Debe mostrar `True` y `Tesla T4`. Si muestra `False`, ve a
 | `weight_decay`   | 0.01                        |
 | `grad_clip`      | 1.0                         |
 | `val_split`      | 0.05                        |
-| `MAX_SEQUENCES`  | 300,000 (~19.5M tokens)     |
-
-**Tiempo estimado**: ~5-6 min/época en T4 → **~110 minutos en total**.
+| `MAX_SEQUENCES`  | 300,000 (~57.6M tokens)     |
+| `MAX_SEQ_LEN`    | 192                         |
 
 **Progreso esperado** (val loss):
 
 | Época | Val Loss | PPL  |
 |-------|----------|------|
-| 1     | 1.960    | 7.10 |
-| 5     | 1.689    | 5.41 |
-| 10    | 1.616    | 5.03 |
-| 15    | 1.573    | 4.82 |
-| 20    | **1.537**| **4.65** |
+| 1     | ~1.96    | ~7.1 |
+| 5     | ~1.69    | ~5.4 |
+| 10    | ~1.62    | ~5.0 |
+| 15    | ~1.57    | ~4.8 |
+| 20    | **1.3817**| **3.98** |
 
 Cada época se guarda en `OUTPUT_DIR` como `epXX_valX.XXX.pt`.
 
@@ -425,10 +427,10 @@ Cada época se guarda en `OUTPUT_DIR` como `epXX_valX.XXX.pt`.
 
 ```python
 from google.colab import files
-files.download("/content/drive/MyDrive/checkpoints_PLE_TinyStories/ep20_val1.537.pt")
+files.download("/content/drive/MyDrive/checkpoints_PLE_192/ep20_val1.382.pt")
 ```
 
-Guárdalo en `ESP_SLM/checkpoints/ep20_val1.537.pt`.
+Guárdalo en `ESP_SLM/checkpoints/ep20_val1.382.pt`.
 
 ---
 
@@ -439,22 +441,22 @@ Convierte el checkpoint de PyTorch en un binario cuantizado para el ESP32.
 ### 6.1. Ejecutar la exportación
 
 ```python
-!python export_weights.py
+!python export_weights_192.py
 ```
 
 **Salida esperada**:
 
 ```
-Bin: /content/bitnet_weights.bin (2,823,760 bytes = 2.69 MB)
-Header: /content/bitnet_weights.h (6,028 bytes)
+Bin: /content/bitnet_weights.bin (2,872,912 bytes = 2.74 MB)
+Header: /content/bitnet_weights.h (~8 KB)
 
 Desglose:
-  PLE table:      1.83 MB
-  token_embed:    188 KB
+  token_embed:    200 KB (INT4 + scales)
+  pos_embed:       72 KB (FP16, 192 posiciones)
+  PLE table:     1.83 MB (INT4 + scales)
   Ternarios (2b): 610 KB
-  FP16 (biases):  55 KB
-
-Total Flash: 2.69 MB / 4 MB
+  FP16 (biases):   55 KB
+  ...
 ```
 
 ### 6.2. Verificar el binario
@@ -462,12 +464,13 @@ Total Flash: 2.69 MB / 4 MB
 ```python
 import os
 size = os.path.getsize("/content/bitnet_weights.bin")
-assert size == 2823760, f"Tamaño inesperado: {size}"
+assert size == 2872912, f"Tamaño inesperado: {size}"
 print("✅ Tamaño correcto")
 ```
 
-Debe ser **exactamente 2,823,760 bytes**. Cualquier otro valor indica
-que el export falló o el checkpoint no es el correcto.
+Debe ser **exactamente 2,872,912 bytes**. Cualquier otro valor indica
+que el export falló, el checkpoint no es el correcto, o el
+`MAX_SEQ_LEN` no es 192.
 
 ### 6.3. Descargar los artefactos
 
@@ -497,10 +500,11 @@ En otra terminal:
 
 ```cmd
 cd ESP_SLM\training
-python export_reference.py
+python diagnostico_192.py
 ```
 
-Los top-3 logits de cada posición deben coincidir (±0.4 por cuantización).
+Los top-5 logits de cada posición deben coincidir con error <0.5
+(esperado por la cuantización INT4/INT8/2-bit y el KV cache INT8).
 
 ---
 
@@ -537,7 +541,7 @@ C:\ESP32_work\ESP32_SML\
 ### 7.2. Verificar el binario de pesos
 
 El binario `main/weights/bitnet_weights.bin` ya viene incluido en el
-`.rar` del firmware. Comprueba que su tamaño sea **2,823,760 bytes**:
+`.rar` del firmware. Comprueba que su tamaño sea **2,872,912 bytes**:
 
 ```cmd
 dir C:\ESP32_work\ESP32_SML\main\weights\bitnet_weights.bin
@@ -563,7 +567,7 @@ idf.py build
 
 ```
 Project build complete.
-Binary size: 887,520 bytes (15% free in factory partition)
+Binary size: <tamaño> bytes (<%> free in factory partition)
 ```
 
 Si aparece `region overflowed` o `section overflowed`, revisa la
@@ -619,13 +623,16 @@ esptool.py --chip esp32 -p COM3 -b 460800 write_flash ^
     0x120000 main\weights\bitnet_weights.bin
 ```
 
-Escribe los 2,823,760 bytes en la partición `weights` (offset `0x120000`).
+Escribe los 2,872,912 bytes en la partición `weights` (offset `0x120000`).
 
 > **Importante**: el binario de pesos **no se re-flashea** al
 > recompilar el firmware. Solo hay que repetir este paso si:
 > - Se borra la flash entera (`idf.py erase-flash`).
 > - Se cambia el binario por uno nuevo.
 > - Se modifica la tabla de particiones.
+
+> **Nota**: el orden entre firmware y pesos es indiferente (regiones
+> distintas de la flash). Cualquiera de los dos órdenes funciona.
 
 ---
 
@@ -643,11 +650,12 @@ idf.py -p COM3 monitor
 I (xxx) BITNET: === BitNet ESP32 (chat web) ===
 I (xxx) BITNET: Heap al inicio: ~219 KB
 I (xxx) BITNET: SPIFFS: 2 KB / 110 KB
-I (xxx) BITNET: weights: 2883584 bytes @ 0x120000
+I (xxx) BITNET: weights: 2883584 bytes @ 0x120000 (bin: 2872912 bytes)
 I (xxx) BITNET: Pesos mapeados
-I (xxx) BITNET: Heap tras init: ~217 KB
+I (xxx) BITNET: Heap tras init: ~135 KB
+I (xxx) BITNET: Heap antes WiFi: ~130 KB
 I (xxx) BITNET: WiFi AP OK: SSID=BitNet-ESP32, pass=bitnet1234, IP=192.168.4.1
-I (xxx) BITNET: Heap final: ~143 KB
+I (xxx) BITNET: Heap final: ~88 KB
 I (xxx) BITNET: Listo. Conectate a BitNet-ESP32 y abre http://192.168.4.1
 ```
 
@@ -657,20 +665,21 @@ I (xxx) BITNET: Listo. Conectate a BitNet-ESP32 y abre http://192.168.4.1
    (contraseña `bitnet1234`).
 2. Abre **`http://192.168.4.1`** en el navegador.
 3. Escribe un prompt (ej. `"Había una vez"`).
-4. Pulsa **Enviar**. El texto aparecerá token a token durante ~15-20 s.
+4. Pulsa **Enviar**. El texto aparecerá token a token durante
+   ~60-75 s (o hasta que aparezca `<eos>`).
 
-**Velocidad esperada**: ~3.2 tokens/s.
+**Velocidad esperada**: ~2-2.5 tokens/s.
 
 ### 9.3. Logs durante la generación
 
 ```
 I (xxx) BITNET: WS handshake
-I (xxx) BITNET: Prompt: Había una vez (heap: 143 KB)
-I (xxx) BITNET: Respuesta: 51 tokens (heap: 143 KB)
+I (xxx) BITNET: Prompt: Había una vez (heap: 88 KB)
+I (xxx) BITNET: Respuesta: ~150 tokens (heap: 88 KB, stack free: XXXX B)
 ```
 
 Si el heap **baja** con cada petición, hay una fuga de memoria. Si se
-mantiene estable en ~143 KB, todo correcto.
+mantiene estable en ~88 KB, todo correcto.
 
 ---
 
@@ -706,7 +715,7 @@ completa, que consume un pico de corriente.
 idf.py -p COM3 spiffs-flash
 ```
 
-### 10.3. Generación muy lenta (~1.8 tok/s en vez de 3.2)
+### 10.3. Generación muy lenta (~1.5 tok/s en vez de 2-2.5)
 
 **Causa**: el firmware se compiló con `-Os`.
 
@@ -719,7 +728,7 @@ idf.py -p COM3 spiffs-flash
 
 **Solución**:
 
-1. Verifica el heap libre en el log. Si es <80 KB, reduce el consumo:
+1. Verifica el heap libre en el log. Si es <50 KB, reduce el consumo:
    - `CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM = 4`
    - `CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM = 16`
 2. Si el heap está bien, aumenta el stack del servidor HTTP:
@@ -740,7 +749,7 @@ chcp 65001
 idf.py -p COM3 monitor
 ```
 
-### 10.6. `ModuleNotFoundError: No module named 'model'` en Colab
+### 10.6. `ModuleNotFoundError: No module named 'model_192'` en Colab
 
 **Causa**: los scripts no están en `/content/`.
 
@@ -761,6 +770,58 @@ Si ocurre **en cada arranque**, la calibración nunca termina de guardarse.
 ```
 Component config → PHY → RF calibration → Partial calibration
 ```
+
+### 10.8. Generación incoherente: solo repite "Habia una vez!" y se corta
+
+**Causa**: bug en `attention()` del motor C. K y V se indexaban con
+`off + d` (offset de la cabeza Q) aunque `num_kv_heads = 1`. Esto
+producía lecturas fuera de fila para las cabezas 1-3 y contaminaba
+posiciones >0. El motor C de versiones antiguas tiene este bug.
+
+**Solución**: en `bitnet_inference.c`, función `attention()`, eliminar
+`off` del índice de K y V (mantenerlo solo para Q):
+
+```c
+float kd = (float)krow[d] * sk_j;                        // antes: krow[off + d]
+acc += buf_scores[j] * ((float)V_cache[l][j][d] * sv_j); // antes: [off + d]
+```
+
+**Verificación**: tras el fix, los logits de pos 0-4 deben coincidir
+con PyTorch (error <0.5) y la generación debe producir español
+coherente. Detalle en `ARQUITECTURA.MD §5.3`.
+
+### 10.9. `region 'dram0_0_seg' overflowed by 5176 bytes`
+
+**Causa**: con `MAX_SEQ_LEN = 192`, el KV cache INT8 (110 KB) + las
+escalas + buffers + WiFi + HTTPD no caben en la DRAM útil del ESP32
+original (~160 KB). El linker falla al enlazar `app-template.elf`.
+
+**Solución**: en `main/bitnet_weights.h`:
+
+```c
+#define MAX_SEQ_LEN  160   // antes 192
+```
+
+El binario de pesos sigue siendo válido (`2,872,912` bytes): solo se
+usan las primeras 160 filas de `pos_embed` en runtime. No hay que
+re-exportar. Detalle en `ARQUITECTURA.MD §5.2`.
+
+### 10.10. Relación entre el modelo (192) y el firmware (160)
+
+**Aclaración**: el modelo se entrena con `max_seq_len = 192`, pero el
+firmware se compila con `MAX_SEQ_LEN = 160` por límite de DRAM. No es
+un error de configuración:
+
+- El `.bin` exportado contiene `pos_embed` para 192 posiciones y todos
+  los pesos. Sigue siendo el mismo archivo de **2,872,912 bytes**.
+- El firmware solo usa las primeras 160 posiciones del `pos_embed` y
+  reserva KV cache para 160 tokens.
+- En la práctica, el modelo emite `<eos>` antes de llegar a 160, así
+  que la pérdida de contexto no afecta a la calidad de las respuestas.
+
+Si en el futuro se quiere exprimir hasta 192, habría que refactorizar
+el motor para mover `buf_ple` y `logits` a heap (ver `ARQUITECTURA.MD
+§5.2`), pero no es necesario para el funcionamiento actual.
 
 ---
 
@@ -783,14 +844,14 @@ Component config → PHY → RF calibration → Partial calibration
                              │
                              ▼
 ┌──────────────────────────────────────────────────────────────┐
-│  FASE 5    Entrenar en Colab T4 (20 épocas, ~110 min)        │
-│            → ep20_val1.537.pt (27 MB)                        │
+│  FASE 5    Entrenar en Colab T4 (20 épocas)                  │
+│            → ep20_val1.382.pt (27.3 MB, val_loss 1.3817)     │
 └──────────────────────────────────────────────────────────────┘
                              │
                              ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  FASE 6    Exportar a C (INT4/INT8/2-bit)                    │
-│            → bitnet_weights.bin (2.69 MB)                    │
+│            → bitnet_weights.bin (2.74 MB, 2,872,912 B)       │
 └──────────────────────────────────────────────────────────────┘
                              │
                              ▼
@@ -805,7 +866,7 @@ Component config → PHY → RF calibration → Partial calibration
                              │
                              ▼
 ┌──────────────────────────────────────────────────────────────┐
-│  FASE 9    Verificar (WiFi AP + chat web a ~3.2 tok/s)       │
+│  FASE 9    Verificar (WiFi AP + chat web a ~2-2.5 tok/s)     │
 └──────────────────────────────────────────────────────────────┘
 ```
 
